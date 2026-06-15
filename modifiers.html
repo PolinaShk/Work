@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Управление модификаторами</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f0f0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; }
+        .nav { text-align: center; margin-bottom: 30px; }
+        .nav a { color: #2196f3; text-decoration: none; margin: 0 10px; }
+        .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .card h3 { color: #e91e63; margin-bottom: 15px; border-bottom: 2px solid #e91e63; padding-bottom: 8px; }
+        .modifier-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
+        .modifier-info { flex: 1; }
+        .modifier-name { font-size: 16px; font-weight: bold; }
+        .modifier-details { font-size: 12px; color: #666; margin-top: 4px; }
+        .modifier-actions { display: flex; gap: 10px; }
+        .toggle { position: relative; display: inline-block; width: 60px; height: 28px; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: 0.3s; border-radius: 28px; }
+        .slider:before { position: absolute; content: ""; height: 22px; width: 22px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
+        input:checked + .slider { background-color: #4caf50; }
+        input:checked + .slider:before { transform: translateX(32px); }
+        .btn-edit { background: #2196f3; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-delete { background: #f44336; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-add { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-bottom: 15px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 25px; border-radius: 12px; width: 400px; max-width: 90%; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .btn-save { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; }
+        .btn-cancel { background: #999; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px; }
+        .type-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-left: 10px; }
+        .type-ADDITIVE { background: #ff9800; color: white; }
+        .type-SIZE { background: #2196f3; color: white; }
+        .type-SPICINESS { background: #9c27b0; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🥗 Управление модификаторами</h1>
+        <div class="nav">
+            <a href="/">📋 Заказы</a>
+            <a href="/stoplist.html">🚫 Стоп-лист</a>
+            <a href="/modifiers.html">🥗 Модификаторы</a>
+            <a href="/settings.html">⚙️ Настройки</a>
+            <a href="/users.html">👥 Пользователи</a>
+            <a href="/analytics.html">📊 Аналитика</a>
+        </div>
+        
+        <div class="card">
+            <h3>Список модификаторов</h3>
+            <button class="btn-add" onclick="openAddModal()">➕ Добавить модификатор</button>
+            <div id="modifiersList"></div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Добавить модификатор</h3>
+            <input type="hidden" id="modifierId">
+            <div class="form-group">
+                <label>Название</label>
+                <input type="text" id="modifierName" required>
+            </div>
+            <div class="form-group">
+                <label>Тип</label>
+                <select id="modifierType">
+                    <option value="ADDITIVE">🥗 Добавка</option>
+                    <option value="SIZE">📏 Размер</option>
+                    <option value="SPICINESS">🌶️ Острота</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Цена (руб)</label>
+                <input type="number" id="modifierPrice" value="0" step="10">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="modifierRequired"> Обязательный
+                </label>
+            </div>
+            <div style="text-align: right; margin-top: 20px;">
+                <button class="btn-save" onclick="saveModifier()">Сохранить</button>
+                <button class="btn-cancel" onclick="closeModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        async function loadModifiers() {
+            try {
+                const res = await fetch('/api/modifiers');
+                const modifiers = await res.json();
+                const container = document.getElementById('modifiersList');
+                
+                // Группировка по типам
+                const groups = { ADDITIVE: [], SIZE: [], SPICINESS: [] };
+                const typeNames = { ADDITIVE: '🥗 Добавки', SIZE: '📏 Размеры', SPICINESS: '🌶️ Острота' };
+                
+                for (const m of modifiers) {
+                    groups[m.type].push(m);
+                }
+                
+                let html = '';
+                for (const [type, items] of Object.entries(groups)) {
+                    if (items.length === 0) continue;
+                    html += `<div style="margin-top: 20px;"><strong>${typeNames[type]}:</strong></div>`;
+                    for (const m of items) {
+                        html += `
+                            <div class="modifier-item">
+                                <div class="modifier-info">
+                                    <span class="modifier-name">${m.name}</span>
+                                    <span class="type-badge type-${m.type}">${typeNames[type]}</span>
+                                    <div class="modifier-details">
+                                        ${m.price > 0 ? m.price + ' руб' : 'бесплатно'}
+                                        ${m.isRequired ? ' • Обязательный' : ''}
+                                    </div>
+                                </div>
+                                <div class="modifier-actions">
+                                    <label class="toggle">
+                                        <input type="checkbox" ${m.isAvailable ? 'checked' : ''} onchange="toggleModifier(${m.id}, this.checked)">
+                                        <span class="slider"></span>
+                                    </label>
+                                    <button class="btn-edit" onclick="openEditModal(${m.id})">✏️</button>
+                                    <button class="btn-delete" onclick="deleteModifier(${m.id})">🗑</button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+                container.innerHTML = html || '<p>Нет модификаторов. Добавьте первый.</p>';
+            } catch (error) {
+                console.error('Ошибка:', error);
+                document.getElementById('modifiersList').innerHTML = '<p style="color:red;">Ошибка загрузки</p>';
+            }
+        }
+        
+        async function toggleModifier(id, isAvailable) {
+            try {
+                await fetch(`/api/modifiers/${id}/toggle`, { method: 'PATCH' });
+                loadModifiers();
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Ошибка при обновлении');
+            }
+        }
+        
+        function openAddModal() {
+            document.getElementById('modalTitle').textContent = '➕ Добавить модификатор';
+            document.getElementById('modifierId').value = '';
+            document.getElementById('modifierName').value = '';
+            document.getElementById('modifierType').value = 'ADDITIVE';
+            document.getElementById('modifierPrice').value = '0';
+            document.getElementById('modifierRequired').checked = false;
+            document.getElementById('modal').style.display = 'flex';
+        }
+        
+        async function openEditModal(id) {
+            const res = await fetch('/api/modifiers');
+            const modifiers = await res.json();
+            const m = modifiers.find(x => x.id === id);
+            if (!m) return;
+            
+            document.getElementById('modalTitle').textContent = '✏️ Редактировать модификатор';
+            document.getElementById('modifierId').value = m.id;
+            document.getElementById('modifierName').value = m.name;
+            document.getElementById('modifierType').value = m.type;
+            document.getElementById('modifierPrice').value = m.price;
+            document.getElementById('modifierRequired').checked = m.isRequired === 1;
+            document.getElementById('modal').style.display = 'flex';
+        }
+        
+        async function saveModifier() {
+            const id = document.getElementById('modifierId').value;
+            const name = document.getElementById('modifierName').value;
+            const type = document.getElementById('modifierType').value;
+            const price = parseFloat(document.getElementById('modifierPrice').value);
+            const isRequired = document.getElementById('modifierRequired').checked ? 1 : 0;
+            
+            if (!name) {
+                alert('Введите название');
+                return;
+            }
+            
+            try {
+                if (id) {
+                    await fetch(`/api/modifiers/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, type, price, isRequired })
+                    });
+                } else {
+                    await fetch('/api/modifiers', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, type, price, isRequired })
+                    });
+                }
+                closeModal();
+                loadModifiers();
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Ошибка сохранения');
+            }
+        }
+        
+        async function deleteModifier(id) {
+            if (confirm('Удалить модификатор?')) {
+                try {
+                    await fetch(`/api/modifiers/${id}`, { method: 'DELETE' });
+                    loadModifiers();
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    alert('Ошибка удаления');
+                }
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+        
+        loadModifiers();
+    </script>
+</body>
+</html>

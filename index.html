@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Админ-панель ресторана</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f0f0; padding: 20px; }
+        h1 { text-align: center; color: #333; margin-bottom: 10px; }
+        .nav { text-align: center; margin-bottom: 30px; }
+        .nav a { color: #2196f3; text-decoration: none; margin: 0 10px; }
+        .orders-grid { display: grid; gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .order-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 5px solid; }
+        .order-card.status-NEW { border-left-color: #ff9800; }
+        .order-card.status-PENDING { border-left-color: #ff5722; }
+        .order-card.status-CONFIRMED { border-left-color: #2196f3; }
+        .order-card.status-PREPARING { border-left-color: #9c27b0; }
+        .order-card.status-READY { border-left-color: #4caf50; }
+        .order-header { display: flex; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+        .order-number { font-size: 18px; font-weight: bold; color: #333; }
+        .order-status { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .status-NEW { background: #ff9800; color: white; }
+        .status-PENDING { background: #ff5722; color: white; }
+        .status-CONFIRMED { background: #2196f3; color: white; }
+        .status-PREPARING { background: #9c27b0; color: white; }
+        .status-READY { background: #4caf50; color: white; }
+        .order-info { color: #555; margin-bottom: 10px; font-size: 14px; }
+        .order-total { font-size: 20px; font-weight: bold; color: #e91e63; margin: 10px 0; }
+        .order-actions { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+        button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+        .btn-status { background: #2196f3; color: white; }
+        .btn-suggest { background: #ff5722; color: white; }
+        .btn-details { background: #607d8b; color: white; }
+        .details { margin-top: 15px; padding: 15px; background: #e8e8e8; border-radius: 8px; display: none; color: #222; }
+        .details.show { display: block; }
+        .unavailable-list { background: #ffe0b2; padding: 10px; border-radius: 8px; margin-top: 10px; }
+        .refresh-btn { display: block; margin: 0 auto 20px; padding: 10px 20px; background: #4caf50; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🍕 Админ-панель ресторана</h1>
+    <div class="nav">
+        <a href="/">📋 Заказы</a>
+        <a href="/stoplist.html">🚫 Стоп-лист</a>
+        <a href="/modifiers.html">🥗 Модификаторы</a>
+        <a href="/settings.html">⚙️ Настройки</a>
+        <a href="/users.html">👥 Пользователи</a>
+        <a href="/analytics.html">📊 Аналитика</a>
+    </div>
+    <button class="refresh-btn" onclick="loadOrders()">🔄 Обновить</button>
+    <div id="orders" class="orders-grid"></div>
+
+    <script>
+        async function loadOrders() {
+            try {
+                const response = await fetch('/api/orders');
+                const orders = await response.json();
+                const container = document.getElementById('orders');
+                container.innerHTML = '';
+                for (const order of orders) {
+                    const card = document.createElement('div');
+                    card.className = `order-card status-${order.status}`;
+                    card.innerHTML = `
+                        <div class="order-header">
+                            <span class="order-number">${order.orderNumber}</span>
+                            <span class="order-status status-${order.status}">${getStatusText(order.status)}</span>
+                        </div>
+                        <div class="order-info">👤 ${order.customerName || 'Клиент'}<br>📅 ${new Date(order.createdAt).toLocaleString()}</div>
+                        <div class="order-total">💰 ${order.totalPrice} руб.</div>
+                        <div class="order-actions">
+                            <button class="btn-details" onclick="toggleDetails(${order.id})">📋 Детали</button>
+                            ${getStatusButtons(order.status, order.id)}
+                            ${order.status === 'PENDING' ? `<button class="btn-suggest" onclick="suggestReplacement(${order.id}, '${order.orderNumber}', ${order.customerId})">💬 Предложить замену</button>` : ''}
+                        </div>
+                        <div id="details-${order.id}" class="details"></div>
+                    `;
+                    container.appendChild(card);
+                    if (order.status === 'PENDING') loadUnavailableItems(order.id);
+                }
+            } catch (error) { console.error(error); }
+        }
+        
+        async function loadUnavailableItems(orderId) {
+            try {
+                const response = await fetch(`/api/orders/${orderId}/unavailable`);
+                const data = await response.json();
+                const detailsDiv = document.getElementById(`details-${orderId}`);
+                if (data.unavailable && data.unavailable.length > 0 && detailsDiv) {
+                    let html = '<div class="unavailable-list"><strong>⚠️ Недоступные позиции:</strong>';
+                    for (const u of data.unavailable) {
+                        if (u.type === 'modifier') html += `<div class="unavailable-item">• ${u.itemName}: ${u.modifierName}</div>`;
+                        else if (u.type === 'item') html += `<div class="unavailable-item">• ${u.itemName} (весь товар)</div>`;
+                    }
+                    html += '</div>';
+                    detailsDiv.innerHTML = html + detailsDiv.innerHTML;
+                }
+            } catch (error) { console.error(error); }
+        }
+        
+        function getStatusText(status) {
+            const statuses = { 'NEW': '🆕 Новый', 'PENDING': '⏳ Ожидает согласования', 'CONFIRMED': '✅ Принят', 'PREPARING': '🍳 Готовится', 'READY': '🎉 Готов', 'COMPLETED': '📦 Выдан', 'CANCELLED': '❌ Отменён' };
+            return statuses[status] || status;
+        }
+        
+        function getStatusButtons(status, orderId) {
+            const buttons = [];
+            if (status === 'NEW') buttons.push(`<button class="btn-status" onclick="updateStatus(${orderId}, 'CONFIRMED')">✅ Принять</button>`);
+            if (status === 'CONFIRMED') buttons.push(`<button class="btn-status" onclick="updateStatus(${orderId}, 'PREPARING')">🍳 Начать готовить</button>`);
+            if (status === 'PREPARING') buttons.push(`<button class="btn-status" onclick="updateStatus(${orderId}, 'READY')">🎉 Заказ готов</button>`);
+            if (status === 'READY') buttons.push(`<button class="btn-status" onclick="updateStatus(${orderId}, 'COMPLETED')">📦 Выдан</button>`);
+            return buttons.join('');
+        }
+        
+        async function suggestReplacement(orderId, orderNumber, customerId) {
+            const originalItem = prompt('Для какой позиции предлагаете замену? (например: Маргарита)');
+            if (!originalItem) return;
+            const originalModifier = prompt('Какой ингредиент недоступен? (например: сыр)');
+            if (!originalModifier) return;
+            const suggestedModifier = prompt('Что предложить вместо? (например: соус, или оставить пустым если просто убрать)', '');
+            const message = prompt('Сообщение клиенту:', `К сожалению, ${originalModifier} временно нет в ${originalItem}. ${suggestedModifier ? `Можем добавить ${suggestedModifier} вместо него.` : 'Можем приготовить без него.'} Согласны?`);
+            if (!message) return;
+            
+            await fetch(`/api/orders/${orderId}/suggest`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderId, orderNumber, customerId, originalItemName: originalItem, originalModifierName: originalModifier, suggestedModifierName: suggestedModifier, message })
+            });
+            alert('Предложение отправлено клиенту');
+        }
+        
+        async function toggleDetails(orderId) {
+            const detailsDiv = document.getElementById(`details-${orderId}`);
+            if (detailsDiv.classList.contains('show')) { detailsDiv.classList.remove('show'); return; }
+            const response = await fetch(`/api/orders/${orderId}`);
+            const data = await response.json();
+            let itemsHtml = '<h4>📋 Состав заказа:</h4><ul class="items-list">';
+            for (const item of data.items) itemsHtml += `<li>🍽 ${item.itemName} — ${item.itemPrice} руб. x ${item.quantity}</li>`;
+            itemsHtml += '</ul>';
+            detailsDiv.innerHTML = itemsHtml;
+            detailsDiv.classList.add('show');
+            
+            const unavailResponse = await fetch(`/api/orders/${orderId}/unavailable`);
+            const unavailData = await unavailResponse.json();
+            if (unavailData.unavailable && unavailData.unavailable.length > 0) {
+                let html = '<div class="unavailable-list"><strong>⚠️ Недоступные позиции:</strong>';
+                for (const u of unavailData.unavailable) {
+                    if (u.type === 'modifier') html += `<div>• ${u.itemName}: ${u.modifierName}</div>`;
+                    else if (u.type === 'item') html += `<div>• ${u.itemName} (весь товар)</div>`;
+                }
+                html += '</div>';
+                detailsDiv.innerHTML = html + detailsDiv.innerHTML;
+            }
+        }
+        
+        async function updateStatus(orderId, status) {
+            await fetch(`/api/orders/${orderId}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+            loadOrders();
+        }
+        
+        loadOrders();
+        setInterval(loadOrders, 30000);
+    </script>
+</body>
+</html>

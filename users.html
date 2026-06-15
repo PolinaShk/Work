@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Управление пользователями</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f0f0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; }
+        .nav { text-align: center; margin-bottom: 30px; }
+        .nav a { color: #2196f3; text-decoration: none; margin: 0 10px; }
+        .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .card h3 { color: #e91e63; margin-bottom: 15px; border-bottom: 2px solid #e91e63; padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f5f5f5; font-weight: bold; }
+        .btn-add { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-bottom: 15px; }
+        .btn-edit { background: #2196f3; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+        .btn-delete { background: #f44336; color: white; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-save { background: #4caf50; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; }
+        .btn-cancel { background: #999; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-left: 10px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 25px; border-radius: 12px; width: 400px; max-width: 90%; }
+        .modal-content h3 { margin-bottom: 15px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .status-active { color: #4caf50; font-weight: bold; }
+        .status-inactive { color: #f44336; font-weight: bold; }
+        .role-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+        .role-ADMIN { background: #e91e63; color: white; }
+        .role-MANAGER { background: #2196f3; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👥 Управление пользователями</h1>
+        <div class="nav">
+            <a href="/">📋 Заказы</a>
+            <a href="/stoplist.html">🚫 Стоп-лист</a>
+            <a href="/modifiers.html">🥗 Модификаторы</a>
+            <a href="/settings.html">⚙️ Настройки</a>
+            <a href="/users.html">👥 Пользователи</a>
+            <a href="/analytics.html">📊 Аналитика</a>
+        </div>
+        
+        <div class="card">
+            <h3>Список сотрудников</h3>
+            <button class="btn-add" onclick="openAddModal()">➕ Добавить пользователя</button>
+            <div style="overflow-x: auto;">
+                <table id="usersTable">
+                    <thead>
+                        <tr><th>ID</th><th>Email</th><th>Имя</th><th>Телефон</th><th>Роль</th><th>Статус</th><th>Дата создания</th><th>Действия</th></tr>
+                    </thead>
+                    <tbody id="usersList"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно добавления/редактирования -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Добавить пользователя</h3>
+            <input type="hidden" id="userId">
+            <div class="form-group">
+                <label>Email *</label>
+                <input type="email" id="userEmail" required>
+            </div>
+            <div class="form-group" id="passwordGroup">
+                <label>Пароль *</label>
+                <input type="password" id="userPassword">
+            </div>
+            <div class="form-group">
+                <label>Имя *</label>
+                <input type="text" id="userName" required>
+            </div>
+            <div class="form-group">
+                <label>Телефон</label>
+                <input type="text" id="userPhone">
+            </div>
+            <div class="form-group">
+                <label>Роль</label>
+                <select id="userRole">
+                    <option value="MANAGER">Менеджер</option>
+                    <option value="ADMIN">Администратор</option>
+                </select>
+            </div>
+            <div class="form-group" id="statusGroup" style="display:none;">
+                <label>Статус</label>
+                <select id="userStatus">
+                    <option value="1">Активен</option>
+                    <option value="0">Заблокирован</option>
+                </select>
+            </div>
+            <div style="text-align: right; margin-top: 20px;">
+                <button class="btn-save" onclick="saveUser()">Сохранить</button>
+                <button class="btn-cancel" onclick="closeModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let isEditMode = false;
+        
+        async function loadUsers() {
+            try {
+                const res = await fetch('/api/users');
+                const users = await res.json();
+                const tbody = document.getElementById('usersList');
+                tbody.innerHTML = '';
+                for (const user of users) {
+                    const row = tbody.insertRow();
+                    row.insertCell(0).textContent = user.id;
+                    row.insertCell(1).textContent = user.email;
+                    row.insertCell(2).textContent = user.name || '-';
+                    row.insertCell(3).textContent = user.phone || '-';
+                    row.insertCell(4).innerHTML = `<span class="role-badge role-${user.role}">${user.role === 'ADMIN' ? 'Админ' : 'Менеджер'}</span>`;
+                    row.insertCell(5).innerHTML = user.isActive ? '<span class="status-active">Активен</span>' : '<span class="status-inactive">Заблокирован</span>';
+                    row.insertCell(6).textContent = new Date(user.createdAt).toLocaleDateString();
+                    row.insertCell(7).innerHTML = `
+                        <button class="btn-edit" onclick="openEditModal(${user.id})">✏️</button>
+                        <button class="btn-delete" onclick="deleteUser(${user.id})">🗑</button>
+                    `;
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки пользователей:', error);
+            }
+        }
+        
+        function openAddModal() {
+            isEditMode = false;
+            document.getElementById('modalTitle').textContent = '➕ Добавить пользователя';
+            document.getElementById('userId').value = '';
+            document.getElementById('userEmail').value = '';
+            document.getElementById('userPassword').value = '';
+            document.getElementById('userName').value = '';
+            document.getElementById('userPhone').value = '';
+            document.getElementById('userRole').value = 'MANAGER';
+            document.getElementById('passwordGroup').style.display = 'block';
+            document.getElementById('statusGroup').style.display = 'none';
+            document.getElementById('modal').style.display = 'flex';
+        }
+        
+        async function openEditModal(id) {
+            isEditMode = true;
+            const res = await fetch('/api/users');
+            const users = await res.json();
+            const user = users.find(u => u.id === id);
+            if (!user) return;
+            
+            document.getElementById('modalTitle').textContent = '✏️ Редактировать пользователя';
+            document.getElementById('userId').value = user.id;
+            document.getElementById('userEmail').value = user.email;
+            document.getElementById('userName').value = user.name || '';
+            document.getElementById('userPhone').value = user.phone || '';
+            document.getElementById('userRole').value = user.role;
+            document.getElementById('userStatus').value = user.isActive ? '1' : '0';
+            document.getElementById('passwordGroup').style.display = 'none';
+            document.getElementById('statusGroup').style.display = 'block';
+            document.getElementById('modal').style.display = 'flex';
+        }
+        
+        async function saveUser() {
+            const id = document.getElementById('userId').value;
+            const email = document.getElementById('userEmail').value;
+            const password = document.getElementById('userPassword').value;
+            const name = document.getElementById('userName').value;
+            const phone = document.getElementById('userPhone').value;
+            const role = document.getElementById('userRole').value;
+            
+            if (!email || (!isEditMode && !password) || !name) {
+                alert('Заполните обязательные поля (Email, Имя, Пароль для нового пользователя)');
+                return;
+            }
+            
+            try {
+                if (isEditMode) {
+                    const isActive = document.getElementById('userStatus').value === '1';
+                    await fetch(`/api/users/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, phone, role, isActive })
+                    });
+                } else {
+                    await fetch('/api/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password, name, phone, role })
+                    });
+                }
+                closeModal();
+                loadUsers();
+            } catch (error) {
+                console.error('Ошибка сохранения:', error);
+                alert('Ошибка сохранения пользователя');
+            }
+        }
+        
+        async function deleteUser(id) {
+            if (confirm('Удалить пользователя?')) {
+                try {
+                    await fetch(`/api/users/${id}`, { method: 'DELETE' });
+                    loadUsers();
+                } catch (error) {
+                    console.error('Ошибка удаления:', error);
+                    alert('Ошибка удаления');
+                }
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+        
+        loadUsers();
+    </script>
+</body>
+</html>
